@@ -30,7 +30,7 @@ export default function HeroSection() {
               <div className="text-gray-600 mt-2">Formations</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-blue-700">10k+</div>
+              <div className="text-3xl font-bold text-blue-700">20k+</div>
               <div className="text-gray-600 mt-2">Étudiants</div>
             </div>
           </div>
