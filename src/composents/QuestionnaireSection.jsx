@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
 export default function QuestionnaireSection() {
   const [currentStep, setCurrentStep] = useState(0);
@@ -14,7 +14,7 @@ export default function QuestionnaireSection() {
   const [niveauValide, setNiveauValide] = useState(false);
   const [resultat, setResultat] = useState('');
   const [loading, setLoading] = useState(false);
-  const [validationErrors, setValidationErrors] = useState({}); // Pour stocker les erreurs de validation
+  const [validationErrors, setValidationErrors] = useState({});
 
   const questions = [
     {
@@ -39,7 +39,6 @@ export default function QuestionnaireSection() {
     },
   ];
 
-  // Validation des champs du formulaire Lycée
   const validateLyceeForm = () => {
     const errors = {};
     const fields = ['maths', 'francais', 'anglais', 'physique', 'svt', 'histoire', 'philosophie'];
@@ -56,7 +55,6 @@ export default function QuestionnaireSection() {
     return Object.keys(errors).length === 0;
   };
 
-  // Validation des champs du formulaire Bac+
   const validateBacForm = () => {
     const errors = {};
     
@@ -80,12 +78,11 @@ export default function QuestionnaireSection() {
   };
 
   const handleAnswer = (answer) => {
-    // Question niveau (step 0)
     if (currentStep === 0) {
       setNiveau(answer);
       setAnswers({ ...answers, [currentStep]: answer });
       setShowNiveauForm(true);
-      setValidationErrors({}); // Reset errors
+      setValidationErrors({});
       return;
     }
     setAnswers({ ...answers, [currentStep]: answer });
@@ -97,7 +94,6 @@ export default function QuestionnaireSection() {
   const handleNiveauSubmit = () => {
     let isValid = false;
     
-    // Valider selon le niveau
     if (niveau === 'Lycée') {
       isValid = validateLyceeForm();
     } else {
@@ -133,6 +129,25 @@ export default function QuestionnaireSection() {
     setInfoBac({ ecole: '', filiere: '', moyenne: '', annee: '' });
     setValidationErrors({});
   };
+
+  // Handlers optimisés avec useCallback pour éviter les re-rendus inutiles
+  const handleLyceeChange = useCallback((key, value) => {
+    setNotesLycee(prev => ({ ...prev, [key]: value }));
+    if (validationErrors[key]) {
+      setValidationErrors(prev => ({ ...prev, [key]: null }));
+    }
+  }, [validationErrors]);
+
+  const handleBacChange = useCallback((key, value) => {
+    if (key === 'annee') {
+      // Ne garder que les chiffres pour l'année
+      value = value.replace(/[^\d]/g, '').slice(0, 4);
+    }
+    setInfoBac(prev => ({ ...prev, [key]: value }));
+    if (validationErrors[key]) {
+      setValidationErrors(prev => ({ ...prev, [key]: null }));
+    }
+  }, [validationErrors]);
 
   const analyserAvecIA = async () => {
     setLoading(true);
@@ -185,9 +200,9 @@ Sois précis, encourageant et concis.`
   const progress = ((currentStep + 1) / questions.length) * 100;
   const isFinished = Object.keys(answers).length === questions.length;
 
-  // ✅ Formulaire Lycée avec validation
-  const FormLycee = () => (
-    <div className="mt-6 p-6 bg-blue-50 border border-blue-200 rounded-xl">
+  // Mémoriser les formulaires pour éviter les re-rendus
+  const FormLycee = useMemo(() => (
+    <div className="mt-6 p-6 bg-blue-50 border border-blue-200 rounded-xl" key="lycee-form">
       <h4 className="font-semibold text-blue-900 mb-4">📝 Entre tes notes (sur 20) :</h4>
       <div className="grid grid-cols-2 gap-4">
         {[
@@ -204,19 +219,11 @@ Sois précis, encourageant et concis.`
               {label} <span className="text-red-500">*</span>
             </label>
             <input
-              type="number"
-              min="0"
-              max="20"
-              step="0.5"
+              type="text"
+              inputMode="decimal"
               placeholder="0-20"
               value={notesLycee[key]}
-              onChange={(e) => {
-                setNotesLycee({ ...notesLycee, [key]: e.target.value });
-                // Clear error for this field when user starts typing
-                if (validationErrors[key]) {
-                  setValidationErrors({ ...validationErrors, [key]: null });
-                }
-              }}
+              onChange={(e) => handleLyceeChange(key, e.target.value)}
               className={`w-full p-2 border-2 rounded-lg focus:border-blue-400 outline-none ${
                 validationErrors[key] ? 'border-red-500 bg-red-50' : 'border-gray-200'
               }`}
@@ -235,47 +242,89 @@ Sois précis, encourageant et concis.`
         Continuer →
       </button>
     </div>
-  );
+  ), [notesLycee, validationErrors, handleLyceeChange]);
 
-  // ✅ Formulaire Bac+ avec validation
-  const FormBac = () => (
-    <div className="mt-6 p-6 bg-blue-50 border border-blue-200 rounded-xl">
+  const FormBac = useMemo(() => (
+    <div className="mt-6 p-6 bg-blue-50 border border-blue-200 rounded-xl" key="bac-form">
       <h4 className="font-semibold text-blue-900 mb-4">📝 Infos sur tes études actuelles :</h4>
       <div className="space-y-4">
-        {[
-          { key: 'ecole', label: "Nom de l'école / université", placeholder: "Ex: ENCG Casablanca", type: "text" },
-          { key: 'filiere', label: 'Filière actuelle', placeholder: 'Ex: Génie Informatique', type: "text" },
-          { key: 'moyenne', label: 'Moyenne générale (sur 20)', placeholder: 'Ex: 14.5', type: "number", step: "0.5", min: "0", max: "20" },
-          { key: 'annee', label: "Année d'obtention du diplôme", placeholder: 'Ex: 2025', type: "number", min: "2020", max: "2030" },
-        ].map(({ key, label, placeholder, type, step, min, max }) => (
-          <div key={key}>
-            <label className="text-sm text-gray-600 mb-1 block">
-              {label} <span className="text-red-500">*</span>
-            </label>
-            <input
-              type={type}
-              placeholder={placeholder}
-              step={step}
-              min={min}
-              max={max}
-              value={infoBac[key]}
-              onChange={(e) => {
-                setInfoBac({ ...infoBac, [key]: e.target.value });
-                // Clear error for this field when user starts typing
-                if (validationErrors[key]) {
-                  setValidationErrors({ ...validationErrors, [key]: null });
-                }
-              }}
-              className={`w-full p-2 border-2 rounded-lg focus:border-blue-400 outline-none ${
-                validationErrors[key] ? 'border-red-500 bg-red-50' : 'border-gray-200'
-              }`}
-              required
-            />
-            {validationErrors[key] && (
-              <p className="text-red-500 text-xs mt-1">{validationErrors[key]}</p>
-            )}
-          </div>
-        ))}
+        <div>
+          <label className="text-sm text-gray-600 mb-1 block">
+            Nom de l'école / université <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            placeholder="Ex: ENCG Casablanca"
+            value={infoBac.ecole}
+            onChange={(e) => handleBacChange('ecole', e.target.value)}
+            className={`w-full p-2 border-2 rounded-lg focus:border-blue-400 outline-none ${
+              validationErrors.ecole ? 'border-red-500 bg-red-50' : 'border-gray-200'
+            }`}
+            required
+          />
+          {validationErrors.ecole && (
+            <p className="text-red-500 text-xs mt-1">{validationErrors.ecole}</p>
+          )}
+        </div>
+
+        <div>
+          <label className="text-sm text-gray-600 mb-1 block">
+            Filière actuelle <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            placeholder="Ex: Génie Informatique"
+            value={infoBac.filiere}
+            onChange={(e) => handleBacChange('filiere', e.target.value)}
+            className={`w-full p-2 border-2 rounded-lg focus:border-blue-400 outline-none ${
+              validationErrors.filiere ? 'border-red-500 bg-red-50' : 'border-gray-200'
+            }`}
+            required
+          />
+          {validationErrors.filiere && (
+            <p className="text-red-500 text-xs mt-1">{validationErrors.filiere}</p>
+          )}
+        </div>
+
+        <div>
+          <label className="text-sm text-gray-600 mb-1 block">
+            Moyenne générale (sur 20) <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            inputMode="decimal"
+            placeholder="Ex: 14.5"
+            value={infoBac.moyenne}
+            onChange={(e) => handleBacChange('moyenne', e.target.value)}
+            className={`w-full p-2 border-2 rounded-lg focus:border-blue-400 outline-none ${
+              validationErrors.moyenne ? 'border-red-500 bg-red-50' : 'border-gray-200'
+            }`}
+            required
+          />
+          {validationErrors.moyenne && (
+            <p className="text-red-500 text-xs mt-1">{validationErrors.moyenne}</p>
+          )}
+        </div>
+
+        <div>
+          <label className="text-sm text-gray-600 mb-1 block">
+            Année d'obtention du diplôme <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="Ex: 2025"
+            value={infoBac.annee}
+            onChange={(e) => handleBacChange('annee', e.target.value)}
+            className={`w-full p-2 border-2 rounded-lg focus:border-blue-400 outline-none ${
+              validationErrors.annee ? 'border-red-500 bg-red-50' : 'border-gray-200'
+            }`}
+            required
+          />
+          {validationErrors.annee && (
+            <p className="text-red-500 text-xs mt-1">{validationErrors.annee}</p>
+          )}
+        </div>
       </div>
       <button
         onClick={handleNiveauSubmit}
@@ -284,7 +333,7 @@ Sois précis, encourageant et concis.`
         Continuer →
       </button>
     </div>
-  );
+  ), [infoBac, validationErrors, handleBacChange]);
 
   return (
     <section className="py-20 px-4 bg-gradient-to-br from-blue-50 to-white">
@@ -334,9 +383,9 @@ Sois précis, encourageant et concis.`
               ))}
             </div>
 
-            {/* ✅ Formulaire dynamique selon niveau */}
-            {showNiveauForm && niveau === 'Lycée' && <FormLycee />}
-            {showNiveauForm && niveau !== 'Lycée' && <FormBac />}
+            {/* Formulaire dynamique selon niveau */}
+            {showNiveauForm && niveau === 'Lycée' && FormLycee}
+            {showNiveauForm && niveau !== 'Lycée' && FormBac}
           </div>
 
           {/* Navigation */}
