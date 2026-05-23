@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+
+const API_URL = 'http://127.0.0.1:8000/api';
 
 export default function ConnexionPage() {
   const navigate = useNavigate();
@@ -7,13 +10,15 @@ export default function ConnexionPage() {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    nom: '',
-    prenom: '',
+    firstName: '',
+    lastName: '',
     confirmPassword: ''
   });
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -21,6 +26,7 @@ export default function ConnexionPage() {
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
+    setApiError('');
   };
 
   const validateLogin = () => {
@@ -33,8 +39,8 @@ export default function ConnexionPage() {
 
   const validateRegister = () => {
     const newErrors = {};
-    if (!formData.nom) newErrors.nom = "Le nom est requis";
-    if (!formData.prenom) newErrors.prenom = "Le prénom est requis";
+    if (!formData.lastName) newErrors.lastName = "Le nom est requis";
+    if (!formData.firstName) newErrors.firstName = "Le prénom est requis";
     if (!formData.email) newErrors.email = "L'email est requis";
     else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = "Email invalide";
     if (!formData.password) newErrors.password = "Le mot de passe est requis";
@@ -44,8 +50,91 @@ export default function ConnexionPage() {
     return newErrors;
   };
 
+  // Connexion avec API Laravel
+  const handleLogin = async (email, password) => {
+    try {
+      const response = await axios.post(`${API_URL}/login`, {
+        email: email,
+        password: password
+      });
+      
+      console.log('Réponse login:', response.data);
+      
+      // Stockage du token et des données utilisateur
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+      }
+      if (response.data.user) {
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      }
+      
+      // Configurer le header Authorization
+      if (response.data.token) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+      }
+      
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Erreur login:', error);
+      if (error.response) {
+        return { 
+          success: false, 
+          message: error.response.data.message || 'Email ou mot de passe incorrect' 
+        };
+      }
+      return { success: false, message: 'Erreur de connexion au serveur' };
+    }
+  };
+
+  // Inscription avec API Laravel - Adapter selon votre structure
+  const handleRegister = async (userData) => {
+    try {
+      const response = await axios.post(`${API_URL}/register`, {
+        name: `${userData.firstName} ${userData.lastName}`, // Champ name pour Laravel
+        first_name: userData.firstName,
+        last_name: userData.lastName,
+        email: userData.email,
+        password: userData.password,
+        password_confirmation: userData.confirmPassword
+      });
+      
+      console.log('Réponse register:', response.data);
+      
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+      }
+      if (response.data.user) {
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      }
+      
+      if (response.data.token) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+      }
+      
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Erreur register:', error);
+      if (error.response) {
+        if (error.response.data.errors) {
+          return { 
+            success: false, 
+            validationErrors: error.response.data.errors,
+            message: "Erreur de validation"
+          };
+        }
+        return { 
+          success: false, 
+          message: error.response.data.message || "Erreur lors de l'inscription" 
+        };
+      }
+      return { success: false, message: 'Erreur de connexion au serveur' };
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setApiError('');
+    
     const validationErrors = isLogin ? validateLogin() : validateRegister();
     
     if (Object.keys(validationErrors).length > 0) {
@@ -54,22 +143,47 @@ export default function ConnexionPage() {
     }
 
     setLoading(true);
-    
-    setTimeout(() => {
-      setLoading(false);
-      if (isLogin) {
-        localStorage.setItem('user', JSON.stringify({ email: formData.email }));
+
+    if (isLogin) {
+      const result = await handleLogin(formData.email, formData.password);
+      
+      if (result.success) {
         navigate('/questionnaire');
       } else {
-        alert('Inscription réussie ! Vous pouvez maintenant vous connecter.');
-        setIsLogin(true);
-        setFormData({ email: '', password: '', nom: '', prenom: '', confirmPassword: '' });
+        setApiError(result.message);
       }
-    }, 1500);
+    } else {
+      const result = await handleRegister(formData);
+      
+      if (result.success) {
+        navigate('/questionnaire');
+      } else {
+        if (result.validationErrors) {
+          const formattedErrors = {};
+          Object.keys(result.validationErrors).forEach(key => {
+            if (key === 'first_name') {
+              formattedErrors.firstName = result.validationErrors.first_name[0];
+            } else if (key === 'last_name') {
+              formattedErrors.lastName = result.validationErrors.last_name[0];
+            } else if (key === 'email') {
+              formattedErrors.email = result.validationErrors.email[0];
+            } else if (key === 'password') {
+              formattedErrors.password = result.validationErrors.password[0];
+            }
+          });
+          setErrors(formattedErrors);
+        } else {
+          setApiError(result.message);
+        }
+      }
+    }
+    
+    setLoading(false);
   };
 
   return (
     <section className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-white py-20 px-4 relative overflow-hidden">
+      {/* Animations background */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-32 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
         <div className="absolute -bottom-40 -left-32 w-80 h-80 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
@@ -92,6 +206,12 @@ export default function ConnexionPage() {
         </div>
 
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-8 border border-gray-100">
+          {apiError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-red-600 text-sm text-center">{apiError}</p>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             {!isLogin && (
               <>
@@ -102,15 +222,15 @@ export default function ConnexionPage() {
                     </label>
                     <input
                       type="text"
-                      name="nom"
-                      value={formData.nom}
+                      name="lastName"
+                      value={formData.lastName}
                       onChange={handleChange}
                       className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none focus:border-blue-400 transition-colors ${
-                        errors.nom ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                        errors.lastName ? 'border-red-500 bg-red-50' : 'border-gray-200'
                       }`}
                       placeholder="Dupont"
                     />
-                    {errors.nom && <p className="text-red-500 text-xs mt-1">{errors.nom}</p>}
+                    {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -118,15 +238,15 @@ export default function ConnexionPage() {
                     </label>
                     <input
                       type="text"
-                      name="prenom"
-                      value={formData.prenom}
+                      name="firstName"
+                      value={formData.firstName}
                       onChange={handleChange}
                       className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none focus:border-blue-400 transition-colors ${
-                        errors.prenom ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                        errors.firstName ? 'border-red-500 bg-red-50' : 'border-gray-200'
                       }`}
                       placeholder="Jean"
                     />
-                    {errors.prenom && <p className="text-red-500 text-xs mt-1">{errors.prenom}</p>}
+                    {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
                   </div>
                 </div>
               </>
@@ -189,16 +309,34 @@ export default function ConnexionPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Confirmer le mot de passe <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="password"
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none focus:border-blue-400 transition-colors ${
-                    errors.confirmPassword ? 'border-red-500 bg-red-50' : 'border-gray-200'
-                  }`}
-                  placeholder="••••••••"
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    name="confirmPassword"
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none focus:border-blue-400 transition-colors ${
+                      errors.confirmPassword ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                    }`}
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showConfirmPassword ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
                 {errors.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.confirmPassword}</p>}
               </div>
             )}
@@ -234,7 +372,8 @@ export default function ConnexionPage() {
                 onClick={() => {
                   setIsLogin(!isLogin);
                   setErrors({});
-                  setFormData({ email: '', password: '', nom: '', prenom: '', confirmPassword: '' });
+                  setApiError('');
+                  setFormData({ email: '', password: '', firstName: '', lastName: '', confirmPassword: '' });
                 }}
                 className="ml-2 text-blue-600 font-semibold hover:text-blue-700"
               >
