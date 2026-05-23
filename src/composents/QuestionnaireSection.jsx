@@ -14,6 +14,7 @@ export default function QuestionnaireSection() {
   const [niveauValide, setNiveauValide] = useState(false);
   const [resultat, setResultat] = useState('');
   const [loading, setLoading] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({}); // Pour stocker les erreurs de validation
 
   const questions = [
     {
@@ -38,12 +39,53 @@ export default function QuestionnaireSection() {
     },
   ];
 
+  // Validation des champs du formulaire Lycée
+  const validateLyceeForm = () => {
+    const errors = {};
+    const fields = ['maths', 'francais', 'anglais', 'physique', 'svt', 'histoire', 'philosophie'];
+    
+    fields.forEach(field => {
+      if (!notesLycee[field] || notesLycee[field] === '') {
+        errors[field] = 'Ce champ est obligatoire';
+      } else if (parseFloat(notesLycee[field]) < 0 || parseFloat(notesLycee[field]) > 20) {
+        errors[field] = 'La note doit être comprise entre 0 et 20';
+      }
+    });
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Validation des champs du formulaire Bac+
+  const validateBacForm = () => {
+    const errors = {};
+    
+    if (!infoBac.ecole || infoBac.ecole.trim() === '') {
+      errors.ecole = "Le nom de l'école est obligatoire";
+    }
+    if (!infoBac.filiere || infoBac.filiere.trim() === '') {
+      errors.filiere = 'La filière est obligatoire';
+    }
+    if (!infoBac.moyenne || infoBac.moyenne === '') {
+      errors.moyenne = 'La moyenne est obligatoire';
+    } else if (parseFloat(infoBac.moyenne) < 0 || parseFloat(infoBac.moyenne) > 20) {
+      errors.moyenne = 'La moyenne doit être comprise entre 0 et 20';
+    }
+    if (!infoBac.annee || infoBac.annee.trim() === '') {
+      errors.annee = "L'année d'obtention est obligatoire";
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleAnswer = (answer) => {
     // Question niveau (step 0)
     if (currentStep === 0) {
       setNiveau(answer);
       setAnswers({ ...answers, [currentStep]: answer });
       setShowNiveauForm(true);
+      setValidationErrors({}); // Reset errors
       return;
     }
     setAnswers({ ...answers, [currentStep]: answer });
@@ -53,9 +95,21 @@ export default function QuestionnaireSection() {
   };
 
   const handleNiveauSubmit = () => {
-    setNiveauValide(true);
-    setShowNiveauForm(false);
-    setCurrentStep(1);
+    let isValid = false;
+    
+    // Valider selon le niveau
+    if (niveau === 'Lycée') {
+      isValid = validateLyceeForm();
+    } else {
+      isValid = validateBacForm();
+    }
+    
+    if (isValid) {
+      setNiveauValide(true);
+      setShowNiveauForm(false);
+      setCurrentStep(1);
+      setValidationErrors({});
+    }
   };
 
   const handlePrevious = () => {
@@ -64,6 +118,7 @@ export default function QuestionnaireSection() {
       setCurrentStep(0);
       setNiveauValide(false);
       setShowNiveauForm(false);
+      setValidationErrors({});
     }
   };
 
@@ -76,6 +131,7 @@ export default function QuestionnaireSection() {
     setShowNiveauForm(false);
     setNotesLycee({ maths: '', francais: '', anglais: '', physique: '', svt: '', histoire: '', philosophie: '' });
     setInfoBac({ ecole: '', filiere: '', moyenne: '', annee: '' });
+    setValidationErrors({});
   };
 
   const analyserAvecIA = async () => {
@@ -129,11 +185,11 @@ Sois précis, encourageant et concis.`
   const progress = ((currentStep + 1) / questions.length) * 100;
   const isFinished = Object.keys(answers).length === questions.length;
 
-  // ✅ Formulaire Lycée
+  // ✅ Formulaire Lycée avec validation
   const FormLycee = () => (
-    <div className="mt-6 p-6 bg-blue-50 border border-blue-200 rounded-xl required">
+    <div className="mt-6 p-6 bg-blue-50 border border-blue-200 rounded-xl">
       <h4 className="font-semibold text-blue-900 mb-4">📝 Entre tes notes (sur 20) :</h4>
-      <div className="grid grid-cols-2 gap-4 required">
+      <div className="grid grid-cols-2 gap-4">
         {[
           { key: 'maths', label: 'Mathématiques' },
           { key: 'francais', label: 'Français' },
@@ -144,17 +200,31 @@ Sois précis, encourageant et concis.`
           { key: 'philosophie', label: 'Philosophie' },
         ].map(({ key, label }) => (
           <div key={key}>
-            <label className="text-sm text-gray-600 mb-1 block">{label}</label>
+            <label className="text-sm text-gray-600 mb-1 block">
+              {label} <span className="text-red-500">*</span>
+            </label>
             <input
               type="number"
               min="0"
               max="20"
+              step="0.5"
               placeholder="0-20"
               value={notesLycee[key]}
-              onChange={(e) => setNotesLycee({ ...notesLycee, [key]: e.target.value })}
-              className="w-full p-2 border-2 border-gray-200 rounded-lg focus:border-blue-400 outline-none"
+              onChange={(e) => {
+                setNotesLycee({ ...notesLycee, [key]: e.target.value });
+                // Clear error for this field when user starts typing
+                if (validationErrors[key]) {
+                  setValidationErrors({ ...validationErrors, [key]: null });
+                }
+              }}
+              className={`w-full p-2 border-2 rounded-lg focus:border-blue-400 outline-none ${
+                validationErrors[key] ? 'border-red-500 bg-red-50' : 'border-gray-200'
+              }`}
               required
             />
+            {validationErrors[key] && (
+              <p className="text-red-500 text-xs mt-1">{validationErrors[key]}</p>
+            )}
           </div>
         ))}
       </div>
@@ -167,27 +237,43 @@ Sois précis, encourageant et concis.`
     </div>
   );
 
-  // ✅ Formulaire Bac+
+  // ✅ Formulaire Bac+ avec validation
   const FormBac = () => (
-    <div className="mt-6 p-6 bg-blue-50 border border-blue-200 rounded-xl required">
+    <div className="mt-6 p-6 bg-blue-50 border border-blue-200 rounded-xl">
       <h4 className="font-semibold text-blue-900 mb-4">📝 Infos sur tes études actuelles :</h4>
-      <div className="space-y-4 required">
+      <div className="space-y-4">
         {[
-          { key: 'ecole', label: "Nom de l'école / université", placeholder: "Ex: ENCG Casablanca" },
-          { key: 'filiere', label: 'Filière actuelle', placeholder: 'Ex: Génie Informatique' },
-          { key: 'moyenne', label: 'Moyenne générale (sur 20)', placeholder: 'Ex: 14.5' },
-          { key: 'annee', label: "Année d'obtention du diplôme", placeholder: 'Ex: 2025' },
-        ].map(({ key, label, placeholder }) => (
+          { key: 'ecole', label: "Nom de l'école / université", placeholder: "Ex: ENCG Casablanca", type: "text" },
+          { key: 'filiere', label: 'Filière actuelle', placeholder: 'Ex: Génie Informatique', type: "text" },
+          { key: 'moyenne', label: 'Moyenne générale (sur 20)', placeholder: 'Ex: 14.5', type: "number", step: "0.5", min: "0", max: "20" },
+          { key: 'annee', label: "Année d'obtention du diplôme", placeholder: 'Ex: 2025', type: "number", min: "2020", max: "2030" },
+        ].map(({ key, label, placeholder, type, step, min, max }) => (
           <div key={key}>
-            <label className="text-sm text-gray-600 mb-1 block">{label}</label>
+            <label className="text-sm text-gray-600 mb-1 block">
+              {label} <span className="text-red-500">*</span>
+            </label>
             <input
-              type="text"
+              type={type}
               placeholder={placeholder}
+              step={step}
+              min={min}
+              max={max}
               value={infoBac[key]}
-              onChange={(e) => setInfoBac({ ...infoBac, [key]: e.target.value })}
-              className="w-full p-2 border-2 border-gray-200 rounded-lg focus:border-blue-400 outline-none"
+              onChange={(e) => {
+                setInfoBac({ ...infoBac, [key]: e.target.value });
+                // Clear error for this field when user starts typing
+                if (validationErrors[key]) {
+                  setValidationErrors({ ...validationErrors, [key]: null });
+                }
+              }}
+              className={`w-full p-2 border-2 rounded-lg focus:border-blue-400 outline-none ${
+                validationErrors[key] ? 'border-red-500 bg-red-50' : 'border-gray-200'
+              }`}
               required
             />
+            {validationErrors[key] && (
+              <p className="text-red-500 text-xs mt-1">{validationErrors[key]}</p>
+            )}
           </div>
         ))}
       </div>
