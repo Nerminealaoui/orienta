@@ -7,7 +7,7 @@ use App\Http\Controllers\API\CourseController;
 use App\Http\Controllers\API\BlogPostController;
 use App\Http\Controllers\API\ScholarshipController;
 use App\Http\Controllers\API\AuthController;
-
+use App\Http\Controllers\OrientationController;
 
 Route::apiResource('institutions', InstitutionController::class);
 Route::apiResource('programs', ProgramController::class);
@@ -20,3 +20,5 @@ Route::apiResource('scholarships', ScholarshipController::class);
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout']);
+
+Route::post('/recommander', [OrientationController::class, 'recommander']);
