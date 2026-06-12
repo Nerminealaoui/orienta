@@ -1,3 +1,4 @@
+// src/composents/Navbar.jsx (version modifiée)
 import { Link, useLocation } from 'react-router-dom';
 
 export default function Navbar() {
@@ -7,6 +8,7 @@ export default function Navbar() {
     { path: '/', label: 'Accueil' },
     { path: '/annuaire', label: 'Annuaire' },
     { path: '/questionnaire', label: 'IA' },
+    { path: '/blog', label: 'Blog' },  // ← AJOUTEZ CETTE LIGNE
   ];
 
   const isActive = (path) => {
