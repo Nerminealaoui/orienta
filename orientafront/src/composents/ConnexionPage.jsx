@@ -208,6 +208,8 @@ export default function ConnexionPage() {
   };
 
   // Vérifier si l'utilisateur est déjà connecté
+
+  
   const isAlreadyLoggedIn = localStorage.getItem('token') && localStorage.getItem('isAuthenticated');
   
   if (isAlreadyLoggedIn) {
